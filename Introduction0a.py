@@ -8,7 +8,9 @@ import mujoco.viewer
 def set_gravity(model, x=0, y=0, z=-9.81):
     print(f"Gravity set to: [{x}, {y}, {z}] m/s²")
     # TODO: Set the gravity vector in the model to the provided x, y, z values
-
+    model.opt.gravity[0] = x
+    model.opt.gravity[1] = y
+    model.opt.gravity[2] = z
 
 def run_sim(viewer, model, data, seconds: int = 10, dt: float = 0.002):
     step = 0
