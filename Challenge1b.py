@@ -145,6 +145,7 @@ def run_evolution_oscillatory_controller(
     ckpt_interval: int,
     checkpoint_path: Optional[str] = None,
     run_evaluation: bool = True,
+    compute_score: bool = True,
     random_seed: int = 42,
 ) -> None:
     """Run evolutionary optimization for robot controller."""
@@ -208,6 +209,13 @@ def run_evolution_oscillatory_controller(
 
     # Save fitness plot
     plot_fitness(ea.full_f, ckpt_dir)
+
+    # Compute score Ant-v5 benchmark environment
+    if compute_score:
+        evaluate_checkpoint(
+            checkpoint_dir=str(ckpt_dir),
+            output_dir=str(ckpt_dir),
+        )
 
     if run_evaluation:
         # Evaluate the trained agent with the same env factory as training
