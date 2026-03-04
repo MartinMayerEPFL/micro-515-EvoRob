@@ -153,13 +153,27 @@ def plot_fitness(full_f, output_dir):
     std_per_gen = np.std(fitness_array, axis=1)
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(generations, best_per_gen, label="Best", linewidth=2)
-    ax.plot(generations, mean_per_gen, label="Mean", linewidth=2)
+    ax.plot(
+        generations,
+        best_per_gen,
+        label="Best",
+        color="#B51F1F",
+        linewidth=2,
+        linestyle="--",
+    )
+    ax.plot(
+        generations,
+        mean_per_gen,
+        label="Mean",
+        color="#007480",
+        linewidth=2,
+    )
     ax.fill_between(
         generations,
         mean_per_gen - std_per_gen,
         mean_per_gen + std_per_gen,
         alpha=0.2,
+        color="#007480",
         label="Mean +/- 1 std",
     )
     ax.set_xlabel("Generation")
@@ -314,7 +328,9 @@ def evaluate_checkpoint(
 
     # --- Run evaluation episodes on the real Ant-v5 ---
     env = gym.make(
-        "Ant-v5", include_cfrc_ext_in_observation=False, max_episode_steps=max_episode_steps
+        "Ant-v5",
+        include_cfrc_ext_in_observation=False,
+        max_episode_steps=max_episode_steps,
     )
     rng = np.random.default_rng(seed)
     episode_rewards = []
