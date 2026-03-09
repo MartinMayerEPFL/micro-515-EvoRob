@@ -146,13 +146,15 @@ class PassiveWalker(MujocoEnv, utils.EzPickle):
         forward_reward = x_velocity * self._forward_reward_weight
 
         #TODO
-        reward = forward_reward
+        distance_from_start_reward = np.linalg.norm(xy_position_after - self.init_qpos[0:2], ord=2) 
+        alive_reward = 0.1 # Recompense si tjrs en en vie (ne tombe pas)
+        reward = forward_reward + distance_from_start_reward + alive_reward
         observation = self._get_obs()
         info = {
             "reward_forward": forward_reward,
             "x_position": self.data.qpos[0],
             "y_position": self.data.qpos[1],
-            "distance_from_origin": np.linalg.norm(self.data.qpos[0:2], ord=2),
+            "distance_from_start": distance_from_start_reward,
             "x_velocity": x_velocity,
             "y_velocity": y_velocity,
         }

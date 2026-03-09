@@ -29,7 +29,7 @@ class EvoAlgAPI(EA):
         """
         # TODO: Initialize your chosen EA framework here
         self.n_params = n_params
-        self.n_gen = num_generations
+        self.n_gen = num_generations 
         self.population_size = population_size
         
         # % bookkeeping for base EA
