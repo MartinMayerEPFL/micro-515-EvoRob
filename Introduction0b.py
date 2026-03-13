@@ -103,11 +103,7 @@ class PassiveWalkerWorld(World):
     def evaluate_individual(self, genotype, n_sim_steps=2000):
         try:
             self.update_robot_xml(genotype)
-<<<<<<< HEAD
-            env = self.create_env(render_mode=None)
-=======
             env = self.create_env()
->>>>>>> f4933a13dcff0291c150cafe7567e712ae428d75
         except ValueError:
             return -np.inf  # invalid individual
         observations, info = env.reset()
@@ -132,14 +128,7 @@ def main():
     #%% Understanding the world
     # TODO: can you improve the genotype - you will also need to modify the PassiveWalkerWorld class!
     genotype = [0.3, 0.2, 0.1, 0.3, 0.2, 0.1]
-<<<<<<< HEAD
-    # Keep this disabled on macOS when GLFW/Cocoa complains about thread usage.
-    preview_human = False
-    if preview_human:
-        world.visualise_individual(genotype)
-=======
     world.visualise_individual(genotype)
->>>>>>> f4933a13dcff0291c150cafe7567e712ae428d75
 
     results_dir = join(ROOT_DIR, "results", ENV_NAME, "EA")
     results_dir = get_distinct_filename(results_dir)
@@ -149,12 +138,8 @@ def main():
     opts["min"] = 0
     opts["max"] = 0.5
     opts["num_parents"] = 20
-<<<<<<< HEAD
-    opts["num_generations"] = 50
-=======
     opts["num_generations"] = 100
     opts["mutation_sigma"] = 0.6
->>>>>>> f4933a13dcff0291c150cafe7567e712ae428d75
     opts["min_sigma"] = 0.3
     opts["sigma_decay_rate"] = 0.1
 
@@ -163,41 +148,22 @@ def main():
     ea = ES(population_size, n_parameters, opts, log_every=2, output_dir=results_dir)
 
     #%% Optimise
-<<<<<<< HEAD
-    for gen in range(ea.n_gen):
-=======
     for _ in range(ea.n_gen):
->>>>>>> f4933a13dcff0291c150cafe7567e712ae428d75
         pop = ea.ask()
         fitnesses_gen = np.empty(ea.n_pop)
         for index, genotype in enumerate(pop):
             fit_ind = world.evaluate_individual(genotype)
             fitnesses_gen[index] = fit_ind
-<<<<<<< HEAD
-        ea.tell(pop, fitnesses_gen, save_checkpoint=(gen == ea.n_gen - 1))
-
-    #%% visualise
-    checkpoint = get_last_checkpoint_dir(results_dir)
-    if checkpoint:
-        best_individual = np.load(join(checkpoint, "x_best.npy"))
-    else:
-        best_individual = np.asarray(ea.x_best_so_far).copy()
-=======
         ea.tell(pop, fitnesses_gen)
 
     #%% visualise
     checkpoint = get_last_checkpoint_dir(results_dir)
     best_individual = np.load(join(results_dir, checkpoint, "x_best.npy"))
->>>>>>> f4933a13dcff0291c150cafe7567e712ae428d75
     world.update_robot_xml(best_individual)
     video_name = join(results_dir, "best.mp4")
     print(f"Finished run, generating video [{video_name}]...")
     world.generate_best_individual_video(
-<<<<<<< HEAD
-        env=world.create_env(render_mode="rgb_array"),
-=======
         env=world.create_env(),
->>>>>>> f4933a13dcff0291c150cafe7567e712ae428d75
         video_name=video_name
     )
 
