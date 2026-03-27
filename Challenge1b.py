@@ -144,39 +144,61 @@ def run_evolution_oscillatory_controller(
     population_size: int,
     ckpt_interval: int,
     checkpoint_path: Optional[str] = None,
+    mode: str = "new",
     run_evaluation: bool = True,
     compute_score: bool = True,
     random_seed: int = 42,
 ) -> None:
     """Run evolutionary optimization for robot controller."""
     np.random.seed(random_seed)
+    mode = mode.lower()
+    if mode not in {"new", "resume"}:
+        raise ValueError(f"Unsupported mode '{mode}'. Use 'new' or 'resume'.")
 
     # Create world for evaluation
     world = AntFlatWorld()
     world.controller = OscillatoryController(output_size=world.action_size)
     world.n_params = world.controller.n_params
 
-    # Timestamped checkpoint directory
-    dt_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    if checkpoint_path is None:
-        checkpoint_path = f"results/{dt_str}_oscillatory_controller_ckpts"
+    if mode == "resume":
+        if checkpoint_path is None:
+            raise ValueError("checkpoint_path is required when mode='resume'.")
+        ckpt_dir = Path(checkpoint_path)
+        if not ckpt_dir.is_dir():
+            raise FileNotFoundError(f"Checkpoint directory not found: {ckpt_dir}")
     else:
-        # If path is relative or absolute, just add prefix
-        checkpoint_path = str(
-            Path(checkpoint_path).parent / f"{dt_str}_{Path(checkpoint_path).name}"
-        )
-
-    ckpt_dir = Path(checkpoint_path)
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
+        dt_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if checkpoint_path is None:
+            ckpt_dir = Path(f"results/{dt_str}_oscillatory_controller_ckpts")
+        else:
+            requested_dir = Path(checkpoint_path)
+            ckpt_dir = requested_dir
+            if ckpt_dir.exists():
+                ckpt_dir = requested_dir.parent / f"{dt_str}_{requested_dir.name}"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     # Create evolutionary algorithm with checkpointing
     num_params = world.n_params
     ea = EvoAlgAPI(
-        num_params, population_size=population_size, sigma=0.5, output_dir=ckpt_dir
+        num_params, population_size=population_size, sigma=0.5, output_dir=str(ckpt_dir)
     )
 
+    if mode == "resume":
+        resume_kind = ea.resume_from_checkpoint()
+        ckpt_dir = Path(ea.directory_name)
+        start_generation = ea.current_gen
+        target_generation = start_generation + num_generations
+        print(
+            f"Resuming training from {ckpt_dir} at generation {start_generation} "
+            f"using {resume_kind} resume."
+        )
+    else:
+        start_generation = 0
+        target_generation = num_generations
+        print(f"Starting new training run in {ckpt_dir}")
+
     # Evolution loop (checkpointing happens automatically in ea.tell())
-    for generation in range(num_generations):
+    for generation in range(start_generation, target_generation):
         # Ask EA for new population
         population = ea.ask()
         fitness = np.empty(len(population))
@@ -186,7 +208,7 @@ def run_evolution_oscillatory_controller(
 
         # Tell EA the results
         save_checkpoint = (generation % ckpt_interval == 0) or (
-            generation == num_generations - 1
+            generation == target_generation - 1
         )
         ea.tell(population, fitness, save_checkpoint=save_checkpoint)
 
@@ -194,8 +216,10 @@ def run_evolution_oscillatory_controller(
         gen_best_idx = np.argmax(fitness)
         gen_best_fitness = fitness[gen_best_idx]
         mean_fitness = np.mean(fitness)
+        run_generation = generation - start_generation + 1
         print(
-            f"Generation {generation + 1}/{num_generations}: "
+            f"Generation {generation + 1}/{target_generation} "
+            f"(this run {run_generation}/{num_generations}): "
             f"Best={gen_best_fitness:.2f}, Mean={mean_fitness:.2f}, "
             f"Overall Best={ea.f_best_so_far:.2f}"
         )
@@ -266,7 +290,7 @@ def evaluate_checkpoint(
     seed: int = 0  # DO NOT CHANGE!
 
     # --- Load best genotype from checkpoint ---
-    last_gen = get_last_checkpoint_dir(checkpoint_dir)
+    last_gen = get_last_checkpoint_dir(checkpoint_dir, required_files=("x_best.npy",))
     x_best_path = os.path.join(last_gen, "x_best.npy") if last_gen else ""
 
     if not os.path.isfile(x_best_path):
@@ -287,7 +311,9 @@ def evaluate_checkpoint(
 
     # --- Run evaluation episodes on the real Ant-v5 ---
     env = gym.make(
-        "Ant-v5", use_contact_forces=False, max_episode_steps=max_episode_steps
+        "Ant-v5",
+        include_cfrc_ext_in_observation=False,
+        max_episode_steps=max_episode_steps,
     )
     rng = np.random.default_rng(seed)
     episode_rewards = []
@@ -320,7 +346,7 @@ def evaluate_checkpoint(
     print("\nRecording video...")
     video_env = gym.make(
         "Ant-v5",
-        use_contact_forces=False,
+        include_cfrc_ext_in_observation=False,
         max_episode_steps=max_episode_steps,
         render_mode="rgb_array",
     )
@@ -377,14 +403,19 @@ def evaluate_checkpoint(
 if __name__ == "__main__":
     test_exercise_implementation()
 
+    TRAINING_MODE = "resume"  # "new" or "resume"
+    RESUME_CHECKPOINT = "results/20260313_161701_oscillatory_controller_ckpts/499"
+
     # Uncomment to run full evolution:
     run_evolution_oscillatory_controller(
-        num_generations=100,
-        population_size=10,
+        num_generations=150,
+        population_size=75,
         ckpt_interval=5,
-        checkpoint_path=None,
+        checkpoint_path=RESUME_CHECKPOINT if TRAINING_MODE == "resume" else None,
+        mode=TRAINING_MODE,
         run_evaluation=True,
-        random_seed=42,
+        compute_score=True,
+        random_seed=61, #42
     )
 
     # ----------------------------------------------------------------
@@ -392,6 +423,6 @@ if __name__ == "__main__":
     # on the standard Gymnasium Ant-v5 and get your final score + video.
     # Replace the path with your actual checkpoint folder.
     # ----------------------------------------------------------------
-    # evaluate_checkpoint(
+    #evaluate_checkpoint(
     #     checkpoint_dir="results/REPLACE_WITH_YOUR_CHECKPOINT_FOLDER",
     # )

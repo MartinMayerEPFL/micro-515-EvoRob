@@ -98,12 +98,50 @@ class AntFlatEnvironment(MujocoEnv):
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return observation, reward, terminated, False, info
 
+    def quaternion_to_euler_bodypos(self, x=None, y=None, z=None, w=None):
+        """Return torso orientation as Euler angles [roll, pitch, yaw].
+
+        If no quaternion is provided, the current global torso quaternion is read
+        from MuJoCo. When four scalars are provided, they are interpreted in the
+        user-facing order (x, y, z, w) and converted internally to MuJoCo's
+        (w, x, y, z) convention before computing Euler angles.
+        """
+        if None in (x, y, z, w):
+            qw, qx, qy, qz = self.data.body("torso").xquat.copy()
+        else:
+            qx, qy, qz, qw = np.asarray([x, y, z, w], dtype=np.float64)
+
+        quat = np.asarray([qw, qx, qy, qz], dtype=np.float64)
+        quat_norm = np.linalg.norm(quat)
+        if quat_norm == 0.0:
+            raise ValueError("Quaternion norm must be non-zero.")
+
+        qw, qx, qy, qz = quat / quat_norm
+
+        roll = np.arctan2(
+            2.0 * (qw * qx + qy * qz),
+            1.0 - 2.0 * (qx * qx + qy * qy),
+        )
+        pitch = np.arcsin(np.clip(2.0 * (qw * qy - qz * qx), -1.0, 1.0))
+        yaw = np.arctan2(
+            2.0 * (qw * qz + qx * qy),
+            1.0 - 2.0 * (qy * qy + qz * qz),
+        )
+
+        return np.array([roll, pitch, yaw], dtype=np.float64)
+
     def _get_obs(self):
         # TODO: Return observation as concatenation of:
         # - position EXCLUDING x,y: self.data.qpos[2:].flatten() (13 values)
         # - velocity: self.data.qvel.flatten() (14 values)
         # This gives 27 total dimensions, making the task translation-invariant
         # Hint: Use np.concatenate() to combine both arrays
+        return np.concatenate(
+            [
+                self.data.qpos[2:].flatten(),
+                self.data.qvel.flatten(),
+            ]
+        )
         raise NotImplementedError("TODO: Implement observation function")
 
     def _get_rew(self, x_velocity: float, action):
@@ -113,6 +151,24 @@ class AntFlatEnvironment(MujocoEnv):
         # 3. ctrl_cost = ...
         # Final reward is the sum of these three components.
         # Return: (reward, reward_info_dict)
+        #qpos[0] = x-position, qpos[1] = y-position, qpos[2] = z-position (height), qpos[3] = torso pitch angle
+        
+        forward_reward = 1 * max(0, x_velocity)  # reward forward velocity, but don't penalize small backward movement (allow for some exploration around 0 velocity)
+        #x_distance = 0.6*self.data.qpos[0]  # x-position of torso 
+        lateral_velocity = -0.2 * abs(self.data.qvel[1])  # penalize lateral velocity (y-direction)
+        rotation_penalty = -0.1 * np.abs(self.quaternion_to_euler_bodypos()[2])  # torso yaw angle
+        healthy_reward = 1.0 if not self._get_termination() else 0.0
+        ctrl_cost = -0.2 * np.sum(np.square(action))#square car action to penalize large actions more heavily
+        
+        reward = forward_reward + lateral_velocity + rotation_penalty + healthy_reward + ctrl_cost
+        reward_info_dict = {
+            "reward_forward": forward_reward,
+            "reward_lateral": lateral_velocity,
+            "reward_rotation": rotation_penalty,
+            "reward_survive": healthy_reward,
+            "reward_ctrl": ctrl_cost,
+        }
+        return reward, reward_info_dict
         raise NotImplementedError("TODO: Implement reward function")
 
     def _get_termination(self):
@@ -120,4 +176,7 @@ class AntFlatEnvironment(MujocoEnv):
         # - Torso height is below 0.26 or above 1.0
         # Return True if NOT healthy (i.e., should terminate)
         # Hint: Use self.state_vector() to get current state.
+        torso_height = self.state_vector()[2]  # get z-coordinate of torso
+        is_healthy = (torso_height >= 0.26) and (torso_height <= 1.0)
+        return not is_healthy
         raise NotImplementedError("TODO: Implement termination function")

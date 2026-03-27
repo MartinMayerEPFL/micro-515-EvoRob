@@ -30,22 +30,42 @@ def natural_keys(text) -> list:
     return [ atoi(c) for c in re.split(r'(\d+)', text) ]
 
 
-def get_last_checkpoint_dir(path: str) -> str:
+def get_last_checkpoint_dir(path: str, required_files: tuple[str, ...] = ()) -> str:
     """
     Get the last checkpoint directory from a given path. Directories are numbered.
     Args:
         path (str): The path to search for checkpoint directories.
+        required_files (tuple[str, ...]): Files that must exist inside a checkpoint
+            directory for it to be considered valid.
     """
     if not os.path.isdir(path):
         print(f"Path {path} is not a directory.")
         return ""
 
-    dirs = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d)) and d.isdigit()]
+    dirs = [
+        d
+        for d in os.listdir(path)
+        if os.path.isdir(os.path.join(path, d)) and d.isdigit()
+    ]
     if not dirs:
         print(f"No checkpoint directories found in {path}.")
         return ""
 
-    last_checkpoint = max(dirs, key=lambda d: int(d))
+    valid_dirs = []
+    for d in dirs:
+        checkpoint_dir = os.path.join(path, d)
+        if all(os.path.isfile(os.path.join(checkpoint_dir, file)) for file in required_files):
+            valid_dirs.append(d)
+
+    if required_files and not valid_dirs:
+        print(
+            f"No valid checkpoint directories found in {path} "
+            f"with required files {required_files}."
+        )
+        return ""
+
+    candidate_dirs = valid_dirs if required_files else dirs
+    last_checkpoint = max(candidate_dirs, key=lambda d: int(d))
     return os.path.join(path, last_checkpoint)
 
 

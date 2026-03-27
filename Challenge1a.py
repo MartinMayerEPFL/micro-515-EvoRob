@@ -117,7 +117,7 @@ def test_exercise_implementation():
     # Test 3: Evolutionary Algorithm
     print("\n[3/3] Testing Evolutionary Algorithm API...")
     try:
-        ea = EvoAlgAPI(n_params=100, population_size=20, sigma=0.5)
+        ea = EvoAlgAPI(n_params=100, population_size=20, sigma=0.3)
         population = ea.ask()
         assert population.shape == (20, 100), (
             f"Population shape should be (20, 100), got {population.shape}"
@@ -194,37 +194,59 @@ def run_evolution_neural_controller(
     population_size: int,
     ckpt_interval: int,
     checkpoint_path: Optional[str] = None,
+    mode: str = "new",
     run_evaluation: bool = True,
     compute_score: bool = True,
     random_seed: int = 42,
 ) -> None:
     """Run evolutionary optimization for robot controller."""
     np.random.seed(random_seed)
+    mode = mode.lower()
+    if mode not in {"new", "resume"}:
+        raise ValueError(f"Unsupported mode '{mode}'. Use 'new' or 'resume'.")
 
     # Create world for evaluation
     world = AntFlatWorld(controller_cls=NeuralNetworkController)
 
-    # Timestamped checkpoint directory
-    dt_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    if checkpoint_path is None:
-        checkpoint_path = f"results/{dt_str}_neural_controller_ckpts"
+    if mode == "resume":
+        if checkpoint_path is None:
+            raise ValueError("checkpoint_path is required when mode='resume'.")
+        ckpt_dir = Path(checkpoint_path)
+        if not ckpt_dir.is_dir():
+            raise FileNotFoundError(f"Checkpoint directory not found: {ckpt_dir}")
     else:
-        # If path is relative or absolute, just add prefix
-        checkpoint_path = str(
-            Path(checkpoint_path).parent / f"{dt_str}_{Path(checkpoint_path).name}"
-        )
-
-    ckpt_dir = Path(checkpoint_path)
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
+        dt_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if checkpoint_path is None:
+            ckpt_dir = Path(f"results/{dt_str}_neural_controller_ckpts")
+        else:
+            requested_dir = Path(checkpoint_path)
+            ckpt_dir = requested_dir
+            if ckpt_dir.exists():
+                ckpt_dir = requested_dir.parent / f"{dt_str}_{requested_dir.name}"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     # Create evolutionary algorithm with checkpointing
     num_params = world.n_params
     ea = EvoAlgAPI(
-        num_params, population_size=population_size, sigma=0.5, output_dir=ckpt_dir
+        num_params, population_size=population_size, sigma=0.3, output_dir=str(ckpt_dir)
     )
 
+    if mode == "resume":
+        resume_kind = ea.resume_from_checkpoint()
+        ckpt_dir = Path(ea.directory_name)
+        start_generation = ea.current_gen
+        target_generation = start_generation + num_generations
+        print(
+            f"Resuming training from {ckpt_dir} at generation {start_generation} "
+            f"using {resume_kind} resume."
+        )
+    else:
+        start_generation = 0
+        target_generation = num_generations
+        print(f"Starting new training run in {ckpt_dir}")
+
     # Evolution loop (checkpointing happens automatically in ea.tell())
-    for generation in range(num_generations):
+    for generation in range(start_generation, target_generation):
         # Ask EA for new population
         population = ea.ask()
         fitness = np.empty(len(population))
@@ -234,7 +256,7 @@ def run_evolution_neural_controller(
 
         # Tell EA the results
         save_checkpoint = (generation % ckpt_interval == 0) or (
-            generation == num_generations - 1
+            generation == target_generation - 1
         )
         ea.tell(population, fitness, save_checkpoint=save_checkpoint)
 
@@ -242,8 +264,10 @@ def run_evolution_neural_controller(
         gen_best_idx = np.argmax(fitness)
         gen_best_fitness = fitness[gen_best_idx]
         mean_fitness = np.mean(fitness)
+        run_generation = generation - start_generation + 1
         print(
-            f"Generation {generation + 1}/{num_generations}: "
+            f"Generation {generation + 1}/{target_generation} "
+            f"(this run {run_generation}/{num_generations}): "
             f"Best={gen_best_fitness:.2f}, Mean={mean_fitness:.2f}, "
             f"Overall Best={ea.f_best_so_far:.2f}"
         )
@@ -313,7 +337,7 @@ def evaluate_checkpoint(
     seed: int = 0  # DO NOT CHANGE!
 
     # --- Load best genotype from checkpoint ---
-    last_gen = get_last_checkpoint_dir(checkpoint_dir)
+    last_gen = get_last_checkpoint_dir(checkpoint_dir, required_files=("x_best.npy",))
     x_best_path = os.path.join(last_gen, "x_best.npy") if last_gen else ""
 
     if not os.path.isfile(x_best_path):
@@ -434,12 +458,16 @@ def evaluate_checkpoint(
 if __name__ == "__main__":
     test_exercise_implementation()
 
+    TRAINING_MODE = "resume"  # "new" or "resume"
+    RESUME_CHECKPOINT = "results/20260319_132119_neural_controller_ckpts"
+
     # Uncomment to run full evolution:
     run_evolution_neural_controller(
-        num_generations=100,
-        population_size=10,
-        ckpt_interval=5,
-        checkpoint_path=None,
+        num_generations=200,
+        population_size=150,
+        ckpt_interval=10,
+        checkpoint_path=RESUME_CHECKPOINT if TRAINING_MODE == "resume" else None,
+        mode=TRAINING_MODE,
         run_evaluation=True,
         compute_score=True,
         random_seed=42,
@@ -450,6 +478,6 @@ if __name__ == "__main__":
     # on the standard Gymnasium Ant-v5 and get your final score + video.
     # Replace the path with your actual checkpoint folder.
     # ----------------------------------------------------------------
-    # evaluate_checkpoint(
-    #     checkpoint_dir="results/20260304_174619_neural_controller_ckpts",
-    # )
+    #evaluate_checkpoint(
+    #    checkpoint_dir="results/20260313_133044_neural_controller_ckpts",
+    #)
