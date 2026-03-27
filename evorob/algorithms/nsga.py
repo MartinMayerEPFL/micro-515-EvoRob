@@ -290,6 +290,10 @@ class NSGAII(EA):
         """
         # TODO: Implement Pareto dominance check
         # Use all() and any() to check the two conditions for dominance
+        if np.all(individual >= other_individual) and np.any(individual > other_individual):
+            return True
+        else:
+            return False
         
         raise NotImplementedError(
             "TODO: Implement dominance check.\n"
